@@ -1,0 +1,85 @@
+<main id="main">
+  <template id="template">
+    <video id="video" controls></video><br />
+    <img id="image" controls /><br />
+    <button id="transcode">Transcode webm to mp4</button>
+    <p id="message"></p>
+    <p>Open Developer Tools (Ctrl+Shift+I) to View Logs</p>
+  </template>
+  <button id="load">Load ffmpeg-core (~31 MB)</button>
+</main>
+
+<script type="module">
+  // import { FFmpeg } from '@ffmpeg/ffmpeg';
+  // import { fetchFile, toBlobURL } from '@ffmpeg/util';
+  /* Works, but we need the headers to work
+  import { FFmpeg } from "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/+esm";
+  import {
+    fetchFile,
+    toBlobURL,
+  } from "https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/+esm";
+  */
+  import { FFmpeg } from "./node_modules/@ffmpeg/ffmpeg/dist/esm/index.js";
+  import {
+    fetchFile,
+    toBlobURL,
+  } from "./node_modules/@ffmpeg/util/dist/esm/index.js";
+  const ffmpeg = new FFmpeg();
+  const button = document.getElementById("load");
+  button.onclick = load;
+
+  async function load() {
+    /*
+    const baseURL =
+      "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm";
+    */
+    const baseURL = "./node_modules/@ffmpeg/core/dist/esm";
+    ffmpeg.on("log", ({ message }) => {
+      const messageRef = document.getElementById("message");
+      messageRef.innerHTML = message;
+      console.log(message);
+    });
+    console.log("loading...");
+    // toBlobURL is used to bypass CORS issue, urls with the same
+    // domain can be used directly.
+    await ffmpeg.load({
+      coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
+      wasmURL: await toBlobURL(
+        `${baseURL}/ffmpeg-core.wasm`,
+        "application/wasm",
+      ),
+    });
+    const template = document.getElementById("template");
+    const main = document.getElementById("main");
+    main.innerHTML = "";
+    main.appendChild(template.cloneNode(true).content);
+    document.getElementById("transcode").onclick = transcode;
+  }
+
+  async function transcode() {
+    const videoRef = document.getElementById("video");
+    const imageRef = document.getElementById("image");
+    await ffmpeg.writeFile(
+      "input.webm",
+      await fetchFile(
+        "https://raw.githubusercontent.com/ffmpegwasm/testdata/master/Big_Buck_Bunny_180_10s.webm",
+      ),
+    );
+    // Convert webm to mp4
+    const now = performance.now();
+    await ffmpeg.exec(["-i", "input.webm", "output.mp4"]);
+    const data = await ffmpeg.readFile("output.mp4");
+    videoRef.src = URL.createObjectURL(
+      new Blob([data.buffer], { type: "video/mp4" }),
+    );
+    console.log((performance.now() - now) / 1000, "seconds");
+    /*
+    // Convert webm to gif (the resulting gif is 2.2mb from just 200kb)
+    await ffmpeg.exec(["-i", "input.webm", "-pix_fmt", "rgb24", "output.gif"]);
+    const data = await ffmpeg.readFile("output.gif");
+    imageRef.src = URL.createObjectURL(
+      new Blob([data.buffer], { type: "image/gif" }),
+    );
+    */
+  }
+</script>
